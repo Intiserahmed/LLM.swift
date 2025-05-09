@@ -78,7 +78,6 @@ public actor LLMCore {
         llama_free(context)
     }
     
-    
     public func encode(_ text: String, shouldAddBOS: Bool = true) -> [Token] {
         let count = Int32(text.cString(using: .utf8)!.count)
         var tokenCount = count + 1
@@ -117,10 +116,11 @@ public actor LLMCore {
         return decoded
     }
     
-    
     func prepareContext(for input: String) -> Bool {
         guard !input.isEmpty else { return false }
         
+        llama_kv_self_seq_rm(context, 0, 0, -1)
+
         tokenBuffer.removeAll()
         
         var tokens = encode(input)
@@ -157,8 +157,8 @@ public actor LLMCore {
     }
     
     func predictNextToken() -> Token {
-        guard shouldContinuePredicting, currentTokenCount < Int32(maxTokenCount) else { 
-            return endToken 
+        guard shouldContinuePredicting, currentTokenCount < Int32(maxTokenCount) else {
+            return endToken
         }
         
         let samplerParams = llama_sampler_chain_default_params()
@@ -228,7 +228,7 @@ public enum LLMError: Error {
 open class LLM: ObservableObject {
     private(set) var model: Model
     public var history: [Chat]
-    public var preprocess: @Sendable (_ input: String, _ history: [Chat]) -> String = { input, _ in return input }
+    public var preprocess: @Sendable (_ input: String, _ history: [Chat]) -> String = { input, _ in input }
     public var postprocess: @Sendable (_ output: String) -> Void = { print($0) }
     public var update: @Sendable (_ outputDelta: String?) -> Void = { _ in }
     
@@ -237,7 +237,7 @@ open class LLM: ObservableObject {
     public var template: Template? = nil {
         didSet {
             guard let template else {
-                preprocess = { input, _ in return input }
+                preprocess = { input, _ in input }
                 Task { await core.setStopSequence(nil) }
                 return
             }
@@ -276,7 +276,6 @@ open class LLM: ObservableObject {
     public let core: LLMCore
     private var isAvailable = true
     private var input: String = ""
-    
     
     public init?(
         from path: String,
@@ -413,7 +412,6 @@ open class LLM: ObservableObject {
         llama_model_free(model)
     }
     
-    
     @MainActor public func setOutput(to newOutput: consuming String) {
         output = newOutput
     }
@@ -421,7 +419,6 @@ open class LLM: ObservableObject {
     public func stop() {
         Task { await core.stopGeneration() }
     }
-    
     
     open func recoverFromLengthy(_ input: borrowing String, to output: borrowing AsyncStream<String>.Continuation) {
         output.yield("TL;DR")
@@ -510,7 +507,7 @@ public struct Template: Sendable {
         shouldDropLast: Bool = false
     ) {
         self.system = system ?? ("", "")
-        self.user = user  ?? ("", "")
+        self.user = user ?? ("", "")
         self.bot = bot ?? ("", "")
         self.stopSequence = stopSequence
         self.systemPrompt = systemPrompt
@@ -683,10 +680,12 @@ extension URL {
     public func appending(path: String) -> URL {
         appendingPathComponent(path)
     }
+
     @backDeployed(before: iOS 16)
     public static var documentsDirectory: URL {
         return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
+
     fileprivate var exists: Bool { FileManager.default.fileExists(atPath: path) }
     fileprivate func getData() async throws -> Data {
         let (data, response) = try await URLSession.shared.data(from: self)
@@ -694,6 +693,7 @@ extension URL {
         guard statusCode / 100 == 2 else { throw HuggingFaceError.network(statusCode: statusCode) }
         return data
     }
+
     fileprivate func downloadData(to destination: URL, _ updateProgress: @Sendable @escaping (Double) -> Void) async throws {
         var observation: NSKeyValueObservation!
         let url: URL = try await withCheckedThrowingContinuation { continuation in
@@ -721,11 +721,13 @@ package extension String {
         let matches = pattern.matches(in: content, range: range)
         return matches.map { match in String(content[Range(match.range, in: content)!]) }
     }
+
     func hasMatch(in content: String) throws -> Bool {
         let pattern = try NSRegularExpression(pattern: self)
         let range = NSRange(location: 0, length: content.utf16.count)
         return pattern.firstMatch(in: content, range: range) != nil
     }
+
     func firstMatch(in content: String) throws -> String? {
         let pattern = try NSRegularExpression(pattern: self)
         let range = NSRange(location: 0, length: content.utf16.count)
@@ -736,7 +738,7 @@ package extension String {
 
 extension [String] {
     mutating func scoup(_ count: Int) {
-        guard 0 < count else { return }
+        guard count > 0 else { return }
         let firstIndex = count
         let lastIndex = count * 2
         self.removeSubrange(firstIndex..<lastIndex)
