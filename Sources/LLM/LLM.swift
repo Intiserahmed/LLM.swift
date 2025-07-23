@@ -200,6 +200,99 @@ public actor LLMCore {
         shouldContinuePredicting = false
     }
     
+    /// Clears the KV cache to free memory and reset the model state
+    public func clearKVCache() {
+        llama_kv_self_clear(context)
+        currentTokenCount = 0
+        tokenBuffer.removeAll()
+        shouldContinuePredicting = false
+    }
+    
+    /// Defragments memory to optimize performance and reduce memory usage
+    public func defragMemory() {
+        llama_kv_self_defrag(context)
+    }
+    
+    /// Clears a specific sequence range from the KV cache
+    /// - Parameters:
+    ///   - seqId: The sequence ID to clear
+    ///   - from: Starting position (p0)
+    ///   - to: Ending position (p1), use -1 for infinity
+    public func clearSequenceRange(seqId: Int32, from p0: Int32, to p1: Int32) {
+        _ = llama_kv_self_seq_rm(context, seqId, p0, p1)
+    }
+    
+    /// Copies a sequence from one ID to another
+    /// - Parameters:
+    ///   - fromSeqId: Source sequence ID
+    ///   - toSeqId: Destination sequence ID
+    ///   - from: Starting position (p0), -1 for beginning
+    ///   - to: Ending position (p1), -1 for end
+    public func copySequence(fromSeqId: Int32, toSeqId: Int32, from p0: Int32, to p1: Int32) {
+        llama_kv_self_seq_cp(context, fromSeqId, toSeqId, p0, p1)
+    }
+    
+    /// Keeps only the specified sequence, removes all others
+    /// - Parameter seqId: The sequence ID to keep
+    public func keepSequenceOnly(seqId: Int32) {
+        llama_kv_self_seq_keep(context, seqId)
+    }
+    
+    /// Adds a position offset to all positions in a sequence
+    /// - Parameters:
+    ///   - seqId: The sequence ID to modify
+    ///   - from: Starting position (p0), -1 for beginning
+    ///   - to: Ending position (p1), -1 for end
+    ///   - delta: Position offset to add
+    public func addPositionOffset(seqId: Int32, from p0: Int32, to p1: Int32, delta: Int32) {
+        llama_kv_self_seq_add(context, seqId, p0, p1, delta)
+    }
+    
+    /// Divides all positions in a sequence by a factor
+    /// - Parameters:
+    ///   - seqId: The sequence ID to modify
+    ///   - from: Starting position (p0), -1 for beginning
+    ///   - to: Ending position (p1), -1 for end
+    ///   - divisor: Factor to divide positions by
+    public func dividePositions(seqId: Int32, from p0: Int32, to p1: Int32, divisor: Int32) {
+        llama_kv_self_seq_div(context, seqId, p0, p1, divisor)
+    }
+    
+    /// Gets the maximum position in a sequence
+    /// - Parameter seqId: The sequence ID to check
+    /// - Returns: Maximum position in the sequence
+    public func getMaxPosition(seqId: Int32) -> Int32 {
+        return llama_kv_self_seq_pos_max(context, seqId)
+    }
+    
+    /// Updates the KV cache (applies shifts, defragmentation, etc.)
+    public func updateKVCache() {
+        llama_kv_self_update(context)
+    }
+    
+    /// Checks if the context supports KV cache shifting
+    /// - Returns: True if shifting is supported
+    public func canShiftKVCache() -> Bool {
+        return llama_kv_self_can_shift(context)
+    }
+    
+    /// Gets the number of tokens currently in the KV cache
+    /// - Returns: Number of tokens
+    public func getTokenCount() -> Int32 {
+        return llama_kv_self_n_tokens(context)
+    }
+    
+    /// Gets the number of used cells in the KV cache
+    /// - Returns: Number of used cells
+    public func getUsedCells() -> Int32 {
+        return llama_kv_self_used_cells(context)
+    }
+    
+    /// Resets performance counters for the context
+    public func resetPerformanceCounters() {
+        llama_perf_context_reset(context)
+    }
+    
     func generateResponseStream(from input: String) -> AsyncStream<String> {
         return AsyncStream<String> { continuation in
             Task {
